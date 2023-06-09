@@ -1,113 +1,205 @@
-import Image from 'next/image'
+"use client";
+
+import classNames from "classnames";
+import { useMemo, useState } from "react";
+
+// Not a great API, but it's the one package I could find that does what I need.
+import "nerdamer/Calculus";
+import "nerdamer/Algebra";
+import "nerdamer/Solve";
+import nerdamer from "nerdamer";
+
+type Variable = {
+  id: string;
+  name: string;
+};
+
+function makeVar(label: string): Variable {
+  return {
+    id: crypto.randomUUID(),
+    name: label,
+  };
+}
+
+function makeVarname(denylist: string[] = []): string {
+  const dict = [
+    "x",
+    "y",
+    "z",
+    "a",
+    "b",
+    "c",
+    "d",
+    "u",
+    "v",
+    "w",
+    "i",
+    "j",
+    "k",
+    "m",
+    "n",
+    "p",
+    "q",
+    "r",
+    "s",
+    "t",
+  ];
+
+  for (let suffix = 0; true; suffix++) {
+    for (const letter of dict) {
+      const label = letter + (suffix === 0 ? "" : suffix);
+      if (!denylist.includes(label)) {
+        return label;
+      }
+    }
+  }
+}
 
 export default function Home() {
+  const [formula, setFormula] = useState<string>("");
+  const [variables, setVariables] = useState<Variable[]>([
+    makeVar(makeVarname()),
+  ]);
+  const [values, setValues] = useState<Record<string, string>>({
+    [variables[0].id]: "0",
+  });
+  const [hoverId, setHoverId] = useState<string | undefined>(undefined);
+  const [wantVarId, setWantVarId] = useState<string | undefined>(undefined);
+
+  const wantVarVal = useMemo<string | undefined>(() => {
+    if (wantVarId === undefined) return;
+    if (variables.length === 0) return;
+
+    const eqs = [
+      formula,
+      ...variables
+        .filter((v) => v.id !== wantVarId)
+        .map((v) => `${v.name} = ${values[v.id]}`),
+    ];
+
+    let vals: [string, number][] = [];
+    try {
+      vals = (nerdamer as any).solveEquations(eqs);
+    } catch (e) {
+      // ignore solver errors
+      return;
+    }
+
+    const resultVars = vals.map((entry) => entry[0]);
+    const inputVars = variables.map((v) => v.name);
+    if (!inputVars.every((v) => resultVars.includes(v))) return;
+
+    const wantName = variables.find((v) => v.id === wantVarId)!.name;
+    const wantVal = vals.find((entry) => entry[0] === wantName)![1];
+    const strA = wantVal.toString();
+    const strB = wantVal.toFixed(4);
+
+    return strA.length < strB.length ? strA : strB;
+  }, [formula, variables, values, wantVarId]);
+
+  function remove(id: string) {
+    setVariables(variables.filter((x) => x.id !== id));
+    if (hoverId === id) setHoverId(undefined);
+    if (wantVarId === id) setWantVarId(undefined);
+  }
+
+  function add() {
+    const newVar = makeVar(makeVarname(variables.map((x) => x.name)));
+    setVariables([...variables, newVar]);
+    setValues({ ...values, [newVar.id]: "0" });
+  }
+
+  function rename(id: string, name: string) {
+    var index = variables.findIndex((x) => x.id === id);
+    if (index < 0) return;
+    variables[index].name = name;
+    setVariables([...variables]);
+  }
+
+  const rowLayout = "flex flex-row justify-between items-center gap-3 p-2";
+  const firstCol = "w-4";
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+    <div className="flex w-full h-full items-center justify-center">
+      <div className="w-1/2 flex flex-col items-center justify-center">
+        <input
+          type="text"
+          className="w-full border-2 p-2 border-gray-300 rounded-md grow"
+          placeholder="Type a formula..."
+          value={formula}
+          onChange={(e) => setFormula(e.target.value)}
+        />
+
+        <div className="w-full mt-4">
+          {variables.map((v) => (
+            <div
+              key={v.id}
+              className={classNames(
+                rowLayout,
+                "border rounded-md",
+                hoverId === v.id ? "border-slate-400" : "border-transparent"
+              )}
+            >
+              <div>
+                <button
+                  className={classNames(
+                    firstCol,
+                    "text-right",
+                    wantVarId === v.id
+                      ? "text-black font-bold"
+                      : "text-slate-400"
+                  )}
+                  onMouseEnter={() => wantVarId !== v.id && setHoverId(v.id)}
+                  onMouseLeave={() => hoverId === v.id && setHoverId(undefined)}
+                  onClick={() => wantVarId !== v.id && setWantVarId(v.id)}
+                >
+                  {wantVarId === v.id || hoverId === v.id ? "⇨" : "•"}
+                </button>
+              </div>
+
+              <div className="grow">
+                <input
+                  type="text"
+                  className="w-full m-0 p-2 border-2 border-gray-300 rounded-md text-right"
+                  value={v.name}
+                  onChange={(e) => rename(v.id, e.target.value)}
+                />
+              </div>
+
+              {v.id === wantVarId ? (
+                <div className="font-bold w-48">{wantVarVal ?? "unknown"}</div>
+              ) : (
+                <div>
+                  <input
+                    className="w-48 m-0 p-2 border-2 border-gray-300 rounded-md"
+                    value={values[v.id] ?? 0}
+                    onChange={(e) =>
+                      setValues({ ...values, [v.id]: e.target.value })
+                    }
+                  />
+                </div>
+              )}
+
+              <div className="w-8">
+                <button
+                  className="ml-2 text-sm text-center"
+                  onClick={() => remove(v.id)}
+                >
+                  ⨯
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <div className={classNames(rowLayout)}>
+            <div className={firstCol} />
+
+            <div className="grow text-left">
+              <button onClick={add}>Add variable</button>
+            </div>
+          </div>
         </div>
       </div>
-
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className="mb-32 grid text-center lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800 hover:dark:bg-opacity-30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Explore the Next.js 13 playground.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  )
+    </div>
+  );
 }
