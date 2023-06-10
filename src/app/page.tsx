@@ -2,6 +2,7 @@
 
 import classNames from "classnames";
 import { useMemo, useState } from "react";
+import * as uuid from "uuid";
 
 // Not a great API, but it's the one package I could find that does what I need.
 import "nerdamer/Calculus";
@@ -16,7 +17,7 @@ type Variable = {
 
 function makeVar(label: string): Variable {
   return {
-    id: crypto.randomUUID(),
+    id: uuid.v4(),
     name: label,
   };
 }
